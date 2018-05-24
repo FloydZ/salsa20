@@ -1,0 +1,185 @@
+     1                                  section .data
+     2 00000000 40C8951DEA623FB710-     indeces: dw 0C840h, 01D95h, 062EAh, 0B73Fh, 03210h, 04765h, 098BAh, 0EDCFh
+     2 00000009 326547BA98CFED     
+     3                                  
+     4                                  section .text
+     5                                  struc s20_ctx
+     6 00000000 <res 00000040>            state    resb 64
+     7                                    .size:
+     8                                  endstruc
+     9                                  
+    10                                  global _s20_setkey
+    11                                  global s20_setkey
+    12                                  
+    13                                  global _s20_permute
+    14                                  global s20_permute
+    15                                  
+    16                                  global _s20_stream
+    17                                  global s20_stream
+    18                                  
+    19                                  ;global s20_encrypt
+    20                                  ;global _s20_encrypt
+    21                                  
+    22                                  
+    23                                  
+    24                                  
+    25                                  
+    26                                  ; void s20_setkey(s20_ctx *ctx, void *key, void *iv)
+    27                                  _s20_setkey:
+    28                                  s20_setkey:
+    29                                      ;rdi [state] 64 bytes
+    30                                      ;rsi [key]
+    31                                      ;rdx [iv]
+    32                                          
+    33 00000000 4989FA                      mov r10, rdi
+    34 00000003 4989F3                      mov r11, rsi
+    35                                  
+    36 00000006 4D31C9                      xor r9, r9 ;Needed to clear some bytes
+    37                                  
+    38 00000009 B865787061                  mov    eax, 061707865h
+    39 0000000E AB                          stosd   ;Saves the constant in ctx
+    40                                      
+    41                                      ; copy 16 bytes of 256-bit key
+    42 0000000F 48A5                        movsq  
+    43 00000011 48A5                        movsq
+    44                                  
+    45 00000013 B86E642033                  mov    eax, 03320646Eh
+    46 00000018 AB                          stosd   ;Saves the next constant in ctx
+    47                                      
+    48                                      ;copy iv to 6,7
+    49 00000019 4887F2                      xchg rsi, rdx
+    50 0000001C 48A5                        movsq
+    51                                      
+    52                                      ; zero 64-bit counter at 8,9
+    53 0000001E 4991                        xchg rax, r9
+    54 00000020 48AB                        stosq
+    55                                      
+    56                                      ; store 32-bits at 10
+    57 00000022 B8322D6279                  mov    eax, 079622D32h
+    58 00000027 AB                          stosd
+    59                                      
+    60                                      ; store remainder of key at 11-14
+    61 00000028 4887F2                      xchg rsi, rdx
+    62 0000002B 48A5                        movsq  
+    63 0000002D 48A5                        movsq
+    64                                      
+    65                                      ; store last 32-bits constant
+    66 0000002F B87465206B                  mov    eax, 06B206574h
+    67 00000034 AB                          stosd
+    68                                      
+    69                                      ;restore saved registers
+    70 00000035 4C89D7                      mov rdi, r10
+    71 00000038 4C89DE                      mov rsi, r11
+    72                                      
+    73 0000003B C3                          ret
+    74                                  
+    75                                  %define a rbx
+    76                                  %define b r8
+    77                                  %define c rdx
+    78                                  %define d r10
+    79                                  
+    80                                  %define t r9d
+    81                                  
+    82                                  ;Internal Only, not exported
+    83                                  ;NOT WORKING WITH C
+    84                                  ; void s20_permute(s20_blk *blk, uint16_t index)
+    85                                  _s20_permute: ;index in rax
+    86                                  s20_permute:
+    87 0000003C 4889C3                      mov    a, rax
+    88 0000003F 4989C0                      mov    b, rax    
+    89 00000042 4889C2                      mov    c, rax    
+    90 00000045 4989C2                      mov    d, rax    
+    91                                      
+    92 00000048 4989CB                      mov    r11, rcx ;save rcx
+    93                                  
+    94                                      ;ror    a, 0
+    95 0000004B 49C1E804                    shr    b, 4
+    96 0000004F 48C1EA08                    shr    c, 8
+    97 00000053 49C1EA0C                    shr    d, 12
+    98                                  
+    99                                      ;SUper Ugly TODO
+   100 00000057 4883E30F                    and    a, 0xf
+   101 0000005B 4983E00F                    and    b, 0xf
+   102 0000005F 4883E20F                    and    c, 0xf
+   103 00000063 4983E20F                    and    d, 0xf
+   104                                  
+   105 00000067 488D1C9F                    lea    a, [rdi+a*4]
+   106 0000006B 4E8D0487                    lea    b, [rdi+b*4]
+   107 0000006F 488D1497                    lea    c, [rdi+c*4]
+   108 00000073 4E8D1497                    lea    d, [rdi+d*4]
+   109                                  
+   110                                      ; load ecx with rotate values
+   111                                      ; 16, 12, 8, 7
+   112 00000077 B907090D12                  mov    rcx, 0120D0907h
+   113                                  s20_permute_rotl32:
+   114 0000007C 448B0B                      mov    t, [a]           ;r9d=x[a]
+   115 0000007F 45030A                      add    t, [d]
+   116 00000082 41D3C1                      rol    t, CL
+   117 00000085 453108                      xor    [b], t
+   118                                  
+   119 00000088 86CD                        xchg   CL, CH
+   120                                              
+   121 0000008A 458B08                      mov    t, [b]           ;r9d=x[b]
+   122 0000008D 44030B                      add    t, [a]
+   123 00000090 41D3C1                      rol    t, CL
+   124 00000093 44310A                      xor    [c], t
+   125                                      
+   126 00000096 4887DA                      xchg   a, c
+   127 00000099 4D87C2                      xchg   b, d
+   128                                      
+   129 0000009C 48C1E910                    shr    rcx, 16
+   130 000000A0 75DA                        jnz    s20_permute_rotl32
+   131                                      
+   132 000000A2 4C89D9                      mov    rcx, r11
+   133 000000A5 C3                          ret
+   134                                  
+   135                                  ; void s20_stream (s20_ctx *ctx, void *in)
+   136                                  _s20_stream:
+   137                                  s20_stream: 
+   138                                      ;rdi [state] 64 bytes
+   139                                      ;rsi [in]
+   140                                      
+   141                                      ;TODO recover rdi, rsi 
+   142 000000A6 4989FD                      mov    r13, rdi  ;Save ctx
+   143 000000A9 4989F6                      mov    r14, rsi  ;Save in
+   144                                  
+   145                                      ;cpy state to in
+   146 000000AC 4887FE                      xchg   rdi, rsi
+   147 000000AF B908000000                  mov    rcx, 8
+   148 000000B4 F348A5                      rep    movsq ;64bytes
+   149                                      
+   150 000000B7 41BF0A000000                mov    r15, 10   ;Rounds: Counter
+   151 000000BD 4C89F7                      mov    rdi, r14
+   152                                  s20_stream_c0:   
+   153 000000C0 48BE-                       mov    rsi, indeces
+   153 000000C2 [0000000000000000] 
+   154                                      
+   155                                  s20_stream_c1:
+   156                                      ;rdi hold  *in
+   157 000000CA B108                        mov    cl, 8
+   158                                  s20_stream_c2:
+   159 000000CC 66AD                        lodsw   ;rax = indeces[cl]
+   160 000000CE E869FFFFFF                  call   s20_permute
+   161 000000D3 E2F7                        loop   s20_stream_c2
+   162 000000D5 49FFCF                      dec    r15
+   163 000000D8 75E6                        jnz    s20_stream_c0
+   164                                  
+   165                                      ; add state to x
+   166 000000DA B108                        mov    cl, 8
+   167                                  s20_stream_c3:
+   168 000000DC 498B44CDF8                  mov rax, [r13 + rcx*8 - 8]           ;r13 = ctx
+   169 000000E1 490144CEF8                  add [r14 + rcx*8 - 8], rax           ;r14 = in
+   170 000000E6 E2F4                        loop s20_stream_c3
+   171                                      
+   172                                      ;stc
+   173                                      ;adc    dword[r13 + 8*4], ecx
+   174                                      ;adc    dword[r13 + 9*4], ecx
+   175                                      
+   176 000000E8 4C89EF                      mov rdi, r13
+   177 000000EB 4C89F6                      mov rsi, r14
+   178 000000EE C3                          ret
+   179                                  
+   180                                  ;_s20_encrypt:
+   181                                  ;s20_encrypt:
+   182                                  ;    call s20_permute
+   183                                  ;    ret
